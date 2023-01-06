@@ -28,55 +28,76 @@ import javax.servlet.Filter;
 
 import java.util.LinkedHashMap;
 
-/**
- * Shiro Config
- */
 @Configuration
 public class ShiroConfig {
 
-    @Bean
-    public ShiroFilterFactoryBean shiroFilterFactoryBean(SecurityManager securityManager) {
-        ShiroFilterFactoryBean shiroFilterFactoryBean = new ShiroFilterFactoryBean();
-        shiroFilterFactoryBean.setSecurityManager(securityManager);
+  @Bean
+  public ShiroFilterFactoryBean shiroFilterFactoryBean(SecurityManager securityManager) {
+    ShiroFilterFactoryBean shiroFilterFactoryBean = new ShiroFilterFactoryBean();
+    shiroFilterFactoryBean.setSecurityManager(securityManager);
 
-        LinkedHashMap<String, Filter> filters = new LinkedHashMap<>();
-        filters.put("jwt", new JWTFilter());
-        shiroFilterFactoryBean.setFilters(filters);
+    LinkedHashMap<String, Filter> filters = new LinkedHashMap<>();
+    filters.put("jwt", new JWTFilter());
+    shiroFilterFactoryBean.setFilters(filters);
 
-        LinkedHashMap<String, String> filterChainDefinitionMap = new LinkedHashMap<>();
-        filterChainDefinitionMap.put("/doc.html", "anon");
-        filterChainDefinitionMap.put("/swagger-ui.html", "anon");
-        filterChainDefinitionMap.put("/swagger-resources", "anon");
-        filterChainDefinitionMap.put("/swagger-resources/configuration/security", "anon");
-        filterChainDefinitionMap.put("/swagger-resources/configuration/ui", "anon");
-        filterChainDefinitionMap.put("/v2/api-docs", "anon");
-        filterChainDefinitionMap.put("/webjars/**", "anon");
+    LinkedHashMap<String, String> filterChainDefinitionMap = new LinkedHashMap<>();
+    filterChainDefinitionMap.put("/actuator/**", "anon");
 
-        filterChainDefinitionMap.put("/**", "jwt");
+    filterChainDefinitionMap.put("/doc.html", "anon");
+    filterChainDefinitionMap.put("/swagger-ui/**", "anon");
+    filterChainDefinitionMap.put("/swagger-resources", "anon");
+    filterChainDefinitionMap.put("/swagger-resources/configuration/security", "anon");
+    filterChainDefinitionMap.put("/swagger-resources/configuration/ui", "anon");
+    filterChainDefinitionMap.put("/v3/api-docs", "anon");
+    filterChainDefinitionMap.put("/webjars/**", "anon");
 
-        shiroFilterFactoryBean.setFilterChainDefinitionMap(filterChainDefinitionMap);
+    filterChainDefinitionMap.put("/passport/**", "anon");
+    filterChainDefinitionMap.put("/systemName", "anon");
+    filterChainDefinitionMap.put("/member/teams", "anon");
+    filterChainDefinitionMap.put("/user/check/**", "anon");
+    filterChainDefinitionMap.put("/user/initTeam", "anon");
+    filterChainDefinitionMap.put("/websocket/**", "anon");
+    filterChainDefinitionMap.put("/metrics/**", "anon");
 
-        return shiroFilterFactoryBean;
-    }
+    filterChainDefinitionMap.put("/index.html", "anon");
+    filterChainDefinitionMap.put("/assets/**", "anon");
+    filterChainDefinitionMap.put("/resource/**/**", "anon");
+    filterChainDefinitionMap.put("/css/**", "anon");
+    filterChainDefinitionMap.put("/fonts/**", "anon");
+    filterChainDefinitionMap.put("/img/**", "anon");
+    filterChainDefinitionMap.put("/js/**", "anon");
+    filterChainDefinitionMap.put("/loading/**", "anon");
+    filterChainDefinitionMap.put("/*.js", "anon");
+    filterChainDefinitionMap.put("/*.png", "anon");
+    filterChainDefinitionMap.put("/*.jpg", "anon");
+    filterChainDefinitionMap.put("/*.less", "anon");
+    filterChainDefinitionMap.put("/*.ico", "anon");
+    filterChainDefinitionMap.put("/", "anon");
+    filterChainDefinitionMap.put("/**", "jwt");
 
-    @Bean
-    public SecurityManager securityManager() {
-        DefaultWebSecurityManager securityManager = new DefaultWebSecurityManager();
-        securityManager.setRealm(shiroRealm());
-        return securityManager;
-    }
+    shiroFilterFactoryBean.setFilterChainDefinitionMap(filterChainDefinitionMap);
 
-    @Bean
-    public ShiroRealm shiroRealm() {
-        return new ShiroRealm();
-    }
+    return shiroFilterFactoryBean;
+  }
 
-    @Bean
-    public AuthorizationAttributeSourceAdvisor authorizationAttributeSourceAdvisor(
-        SecurityManager securityManager) {
-        AuthorizationAttributeSourceAdvisor authorizationAttributeSourceAdvisor =
-            new AuthorizationAttributeSourceAdvisor();
-        authorizationAttributeSourceAdvisor.setSecurityManager(securityManager);
-        return authorizationAttributeSourceAdvisor;
-    }
+  @Bean
+  public SecurityManager securityManager() {
+    DefaultWebSecurityManager securityManager = new DefaultWebSecurityManager();
+    securityManager.setRealm(shiroRealm());
+    return securityManager;
+  }
+
+  @Bean
+  public ShiroRealm shiroRealm() {
+    return new ShiroRealm();
+  }
+
+  @Bean
+  public AuthorizationAttributeSourceAdvisor authorizationAttributeSourceAdvisor(
+      SecurityManager securityManager) {
+    AuthorizationAttributeSourceAdvisor authorizationAttributeSourceAdvisor =
+        new AuthorizationAttributeSourceAdvisor();
+    authorizationAttributeSourceAdvisor.setSecurityManager(securityManager);
+    return authorizationAttributeSourceAdvisor;
+  }
 }

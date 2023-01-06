@@ -22,27 +22,26 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class RefreshCacheTest {
+class RefreshCacheTest {
 
-    Cache<String, String> caffeine = null;
+  Cache<String, String> caffeine = null;
 
-    @Test
-    public void cache() throws Exception {
-        if (caffeine == null) {
-            caffeine = Caffeine.newBuilder()
-                .refreshAfterWrite(50, TimeUnit.MILLISECONDS)
-                .build(this::refresh);
-        }
-        caffeine.put("config", "hadoop");
-        int count = 4;
-        while (count > 0) {
-            System.out.println(caffeine.getIfPresent("config"));
-            Thread.sleep(100L);
-            --count;
-        }
+  @Test
+  void cache() throws Exception {
+    if (caffeine == null) {
+      caffeine =
+          Caffeine.newBuilder().refreshAfterWrite(50, TimeUnit.MILLISECONDS).build(this::refresh);
     }
-
-    public String refresh(String value) {
-        return UUID.randomUUID() + "@" + value;
+    caffeine.put("config", "hadoop");
+    int count = 4;
+    while (count > 0) {
+      System.out.println(caffeine.getIfPresent("config"));
+      Thread.sleep(100L);
+      --count;
     }
+  }
+
+  public String refresh(String value) {
+    return UUID.randomUUID() + "@" + value;
+  }
 }

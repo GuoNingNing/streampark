@@ -23,22 +23,15 @@ import org.apache.streampark.console.system.entity.Role;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 
-import java.util.List;
-import java.util.Set;
-
 public interface RoleService extends IService<Role> {
 
-    Set<String> getUserRoleName(String username);
+  IPage<Role> findRoles(Role role, RestRequest request);
 
-    IPage<Role> findRoles(Role role, RestRequest request);
+  Role findByName(String roleName);
 
-    List<Role> findUserRole(String userName);
+  void createRole(Role role);
 
-    Role findByName(String roleName);
+  void deleteRole(Long roleId);
 
-    void createRole(Role role);
-
-    void deleteRole(Long roleId);
-
-    void updateRole(Role role);
+  void updateRole(Role role);
 }

@@ -33,65 +33,84 @@ import java.util.Map;
 
 public interface ApplicationService extends IService<Application> {
 
-    IPage<Application> page(Application app, RestRequest request);
+  IPage<Application> page(Application app, RestRequest request);
 
-    boolean create(Application app) throws IOException;
+  boolean existsByTeamId(Long teamId);
 
-    Long copy(Application app) throws IOException;
+  boolean create(Application app) throws IOException;
 
-    boolean update(Application app);
+  Long copy(Application app) throws IOException;
 
-    void starting(Application app);
+  boolean update(Application app);
 
-    void start(Application app, boolean auto) throws Exception;
+  void starting(Application app);
 
-    void restart(Application application) throws Exception;
+  void start(Application app, boolean auto) throws Exception;
 
-    String getYarnName(Application app);
+  void restart(Application application) throws Exception;
 
-    AppExistsState checkExists(Application app);
+  String getYarnName(Application app);
 
-    String checkSavepointPath(Application app) throws Exception;
+  AppExistsState checkExists(Application app);
 
-    void cancel(Application app) throws Exception;
+  String checkSavepointPath(Application app) throws Exception;
 
-    void updateTracking(Application application);
+  void cancel(Application app) throws Exception;
 
-    void clean(Application app);
+  void persistMetrics(Application application);
 
-    String readConf(Application app) throws IOException;
+  void clean(Application app);
 
-    Application getApp(Application app);
+  String readConf(Application app) throws IOException;
 
-    String getMain(Application application);
+  Application getApp(Application app);
 
-    boolean mapping(Application app);
+  String getMain(Application application);
 
-    Map<String, Serializable> dashboard();
+  boolean mapping(Application app);
 
-    void tailMvnDownloading(Long id);
+  Map<String, Serializable> dashboard(Long teamId);
 
-    String upload(MultipartFile file) throws ApplicationException;
+  void tailMvnDownloading(Long id);
 
-    /**
-     * set the latest to Effective, it will really become the current effective
-     */
-    void toEffective(Application application);
+  String upload(MultipartFile file) throws ApplicationException;
 
-    void revoke(Application app) throws ApplicationException;
+  /** set the latest to Effective, it will really become the current effective */
+  void toEffective(Application application);
 
-    Boolean delete(Application app);
+  void revoke(Application app) throws ApplicationException;
 
-    boolean checkEnv(Application app) throws ApplicationException;
+  Boolean delete(Application app);
 
-    boolean checkAlter(Application application);
+  boolean checkEnv(Application app) throws ApplicationException;
 
-    void updateLaunch(Application application);
+  boolean checkAlter(Application application);
 
-    List<Application> getByProjectId(Long id);
+  void updateLaunch(Application application);
 
-    boolean checkBuildAndUpdate(Application app);
+  List<Application> getByProjectId(Long id);
 
-    void forcedStop(Application app);
+  List<Application> getByTeamId(Long teamId);
 
+  boolean checkBuildAndUpdate(Application app);
+
+  void forcedStop(Application app);
+
+  boolean existsRunningJobByClusterId(Long clusterId);
+
+  boolean existsJobByClusterId(Long id);
+
+  List<String> getRecentK8sNamespace();
+
+  List<String> getRecentK8sClusterId(Integer executionMode);
+
+  List<String> getRecentFlinkBaseImage();
+
+  List<String> getRecentK8sPodTemplate();
+
+  List<String> getRecentK8sJmPodTemplate();
+
+  List<String> getRecentK8sTmPodTemplate();
+
+  List<String> historyUploadJars();
 }

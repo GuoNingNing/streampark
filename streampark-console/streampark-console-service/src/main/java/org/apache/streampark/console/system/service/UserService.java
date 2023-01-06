@@ -18,97 +18,115 @@
 package org.apache.streampark.console.system.service;
 
 import org.apache.streampark.console.base.domain.RestRequest;
+import org.apache.streampark.console.system.authentication.JWTToken;
 import org.apache.streampark.console.system.entity.User;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 
+import javax.annotation.Nullable;
+
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public interface UserService extends IService<User> {
 
-    /**
-     * find user by name
-     *
-     * @param username username
-     * @return user
-     */
-    User findByName(String username);
+  /**
+   * find user by name
+   *
+   * @param username username
+   * @return user
+   */
+  User findByName(String username);
 
-    /**
-     * find uer detail, contains basic info, role, department
-     *
-     * @param user        user
-     * @param restRequest queryRequest
-     * @return IPage
-     */
-    IPage<User> findUserDetail(User user, RestRequest restRequest);
+  /**
+   * find uer detail, contains basic info, role, department
+   *
+   * @param user user
+   * @param restRequest queryRequest
+   * @return IPage
+   */
+  IPage<User> findUserDetail(User user, RestRequest restRequest);
 
-    /**
-     * update login time
-     *
-     * @param username username
-     */
-    void updateLoginTime(String username) throws Exception;
+  /**
+   * update login time
+   *
+   * @param username username
+   */
+  void updateLoginTime(String username) throws Exception;
 
-    /**
-     * create user
-     *
-     * @param user user
-     */
-    void createUser(User user) throws Exception;
+  /**
+   * create user
+   *
+   * @param user user
+   */
+  void createUser(User user) throws Exception;
 
-    /**
-     * update user
-     *
-     * @param user user
-     */
-    void updateUser(User user) throws Exception;
+  /**
+   * update user
+   *
+   * @param user user
+   */
+  void updateUser(User user) throws Exception;
 
-    /**
-     * delete user list
-     *
-     * @param userIds user id list
-     */
-    void deleteUsers(String[] userIds) throws Exception;
+  /**
+   * delete user
+   *
+   * @param userId user id
+   */
+  void deleteUser(Long userId) throws Exception;
 
-    /**
-     * update user
-     *
-     * @param user user
-     */
-    void updateProfile(User user) throws Exception;
+  /**
+   * update user
+   *
+   * @param user user
+   */
+  void updateProfile(User user) throws Exception;
 
-    /**
-     * update user avatar
-     *
-     * @param username name
-     * @param avatar   avatar
-     */
-    void updateAvatar(String username, String avatar) throws Exception;
+  /**
+   * update user avatar
+   *
+   * @param username name
+   * @param avatar avatar
+   */
+  void updateAvatar(String username, String avatar) throws Exception;
 
-    /**
-     * update password
-     *
-     * @param username user
-     * @param password password
-     */
-    void updatePassword(String username, String password) throws Exception;
+  /**
+   * update password
+   *
+   * @param user
+   * @throws Exception
+   */
+  void updatePassword(User user) throws Exception;
 
-    /**
-     * reset password
-     *
-     * @param usernames user list
-     */
-    void resetPassword(String[] usernames) throws Exception;
+  /**
+   * reset password
+   *
+   * @param usernames user list
+   */
+  void resetPassword(String[] usernames) throws Exception;
 
-    Set<String> getPermissions(String username);
+  /**
+   * Get the permissions of current userId.
+   *
+   * @param userId the user Id
+   * @param teamId team id. If it's null, will find permissions from all teams.
+   * @return permissions
+   */
+  Set<String> getPermissions(Long userId, @Nullable Long teamId);
 
-    List<User> getNoTokenUser();
+  List<User> getNoTokenUser();
 
-    void setLatestTeam(Long teamId, Long userId);
+  void setLastTeam(Long teamId, Long userId);
 
-    void fillInTeam(User user);
+  void clearLastTeam(Long userId, Long teamId);
 
+  void clearLastTeam(Long teamId);
+
+  void fillInTeam(User user);
+
+  List<User> findByAppOwner(Long teamId);
+
+  Map<String, Object> generateFrontendUserInfo(User user, Long teamId, JWTToken token);
 }

@@ -19,8 +19,14 @@ package org.apache.streampark.common.conf
 import java.time.LocalDateTime
 
 object ConfigConst {
+
   /**
-   *
+   * common const
+   */
+
+  val DEFAULT_DATAMASK_STRING = "********"
+
+  /**
    * about parameter...
    */
 
@@ -37,8 +43,6 @@ object ConfigConst {
   val KEY_PASSWORD = "password"
 
   val KEY_TIMEOUT = "timeout"
-
-  val KEY_JOB_ID = "jobId"
 
   val KEY_SEMANTIC = "semantic"
 
@@ -77,7 +81,7 @@ object ConfigConst {
 
   val KEY_JAVA_SECURITY_KRB5_CONF = "java.security.krb5.conf"
 
-  //spark
+  // spark
 
   val KEY_SPARK_USER_ARGS = "spark.user.args"
 
@@ -102,9 +106,15 @@ object ConfigConst {
 
   def KEY_FLINK_PARALLELISM(prefix: String = null): String = if (prefix == null) "parallelism.default" else s"${prefix}parallelism.default"
 
-  val KEY_FLINK_DEPLOYMENT_PROPERTY_PREFIX = "flink.deployment.property."
+  val KEY_FLINK_OPTION_PREFIX = "flink.option."
 
-  val KEY_FLINK_DEPLOYMENT_OPTION_PREFIX = "flink.deployment.option."
+  val KEY_FLINK_PROPERTY_PREFIX = "flink.property."
+
+  val KEY_FLINK_TABLE_PREFIX = "flink.table."
+
+  val KEY_APP_PREFIX = "app."
+
+  val KEY_SQL_PREFIX = "sql."
 
   val KEY_FLINK_APP_NAME = "pipeline.name"
 
@@ -113,6 +123,8 @@ object ConfigConst {
   val KEY_YARN_APP_NAME = "yarn.application.name"
 
   val KEY_YARN_APP_QUEUE = "yarn.application.queue"
+
+  val KEY_K8S_IMAGE_PULL_POLICY = "kubernetes.container.image.pull-policy"
 
   // ---table---
   val KEY_FLINK_TABLE_PLANNER = "flink.table.planner"
@@ -142,7 +154,6 @@ object ConfigConst {
   val KEY_KAFKA_START_FROM_OFFSET = "offset"
 
   val KEY_KAFKA_START_FROM_TIMESTAMP = "timestamp"
-
 
   val KEY_ALIAS = "alias"
 
@@ -211,15 +222,12 @@ object ConfigConst {
     println("      ___/ / /_/ /  /  __/ /_/ / / / / / / /_/ / /_/ / /  / ,<        ")
     println("     /____/\\__/_/   \\___/\\__,_/_/ /_/ /_/ ____/\\__,_/_/  /_/|_|   ")
     println("                                       /_/                        \n\n")
-    println("    Version:  1.2.4                                                   ")
+    println("    Version:  2.0.0                                                   ")
     println("    WebSite:  https://streampark.apache.org                           ")
-    println("    GitHub :  https://github.com/apache/streampark                    ")
+    println("    GitHub :  https://github.com/apache/incubator-streampark                    ")
     println(s"    Info   :  $info                                 ")
     println(s"    Time   :  ${LocalDateTime.now}              \n\n")
     // scalastyle:on println
   }
 
 }
-
-
-

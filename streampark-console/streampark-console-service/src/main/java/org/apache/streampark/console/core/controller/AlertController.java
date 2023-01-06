@@ -39,6 +39,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.validation.constraints.NotNull;
@@ -54,88 +55,110 @@ import java.util.TimeZone;
 @RequestMapping("/flink/alert")
 public class AlertController {
 
-    @Autowired
-    private AlertConfigService alertConfigService;
+  @Autowired private AlertConfigService alertConfigService;
 
-    @Autowired
-    private AlertService alertService;
+  @Autowired private AlertService alertService;
 
-    @ApiOperation(value = "createAlertConfig")
-    @PostMapping(value = "/add")
-    public RestResponse createAlertConfig(@RequestBody AlertConfigWithParams params) {
-        boolean save = alertConfigService.save(AlertConfig.of(params));
-        return RestResponse.success(save);
-    }
+  @ApiOperation(value = "Create alert config")
+  @PostMapping(value = "/add")
+  public RestResponse createAlertConfig(@RequestBody AlertConfigWithParams params) {
+    boolean save = alertConfigService.save(AlertConfig.of(params));
+    return RestResponse.success(save);
+  }
 
-    @ApiOperation(value = "existsAlertConfig")
-    @PostMapping(value = "/exists")
-    public RestResponse existsAlertConfig(@RequestBody AlertConfigWithParams params) {
-        boolean exist = alertConfigService.exist(AlertConfig.of(params));
-        return RestResponse.success(exist);
-    }
+  @ApiOperation(value = "Exist alert config")
+  @PostMapping(value = "/exists")
+  public RestResponse existsAlertConfig(@RequestBody AlertConfigWithParams params) {
+    boolean exist = alertConfigService.exist(AlertConfig.of(params));
+    return RestResponse.success(exist);
+  }
 
-    @ApiOperation(value = "updateAlertConfig")
-    @PostMapping(value = "/update")
-    public RestResponse updateAlertConfig(@RequestBody AlertConfigWithParams params) {
-        boolean update = alertConfigService.updateById(AlertConfig.of(params));
-        return RestResponse.success(update);
-    }
+  @ApiOperation(value = "Update alert config")
+  @PostMapping(value = "/update")
+  public RestResponse updateAlertConfig(@RequestBody AlertConfigWithParams params) {
+    boolean update = alertConfigService.updateById(AlertConfig.of(params));
+    return RestResponse.success(update);
+  }
 
-    @ApiOperation(value = "getAlertConfig")
-    @PostMapping("/get")
-    public RestResponse getAlertConfig(@RequestBody AlertConfigWithParams params) {
-        AlertConfig alertConfig = alertConfigService.getById(params.getId());
-        return RestResponse.success(AlertConfigWithParams.of(alertConfig));
-    }
+  @ApiOperation(value = "Get alert config")
+  @PostMapping("/get")
+  public RestResponse getAlertConfig(@RequestBody AlertConfigWithParams params) {
+    AlertConfig alertConfig = alertConfigService.getById(params.getId());
+    return RestResponse.success(AlertConfigWithParams.of(alertConfig));
+  }
 
-    @ApiOperation(value = "listPageAlertConfigs")
-    @ApiImplicitParams({
-        @ApiImplicitParam(name = "pageSize", value = "page size", required = true, example = "10"),
-        @ApiImplicitParam(name = "pageNum", value = "page num", required = true, example = "1"),
-        @ApiImplicitParam(name = "sortField", value = "sort field"),
-        @ApiImplicitParam(name = "sortOrder", value = "sort order")
-    })
-    @PostMapping(value = "/list")
-    public RestResponse listPageAlertConfigs(@RequestBody AlertConfigWithParams params, RestRequest request) {
-        IPage<AlertConfigWithParams> page = alertConfigService.page(params, request);
-        return RestResponse.success(page);
-    }
+  @ApiOperation(value = "List alert configs(Pagination)")
+  @ApiImplicitParams({
+    @ApiImplicitParam(
+        name = "pageSize",
+        value = "page size",
+        required = true,
+        example = "10",
+        dataTypeClass = Integer.class),
+    @ApiImplicitParam(
+        name = "pageNum",
+        value = "page num",
+        required = true,
+        example = "1",
+        dataTypeClass = Integer.class),
+    @ApiImplicitParam(
+        name = "sortField",
+        value = "sort field",
+        dataType = "string",
+        dataTypeClass = String.class),
+    @ApiImplicitParam(
+        name = "sortOrder",
+        value = "sort order",
+        dataType = "string",
+        dataTypeClass = String.class)
+  })
+  @PostMapping(value = "/list")
+  public RestResponse listPageAlertConfigs(
+      @RequestBody AlertConfigWithParams params, RestRequest request) {
+    IPage<AlertConfigWithParams> page = alertConfigService.page(params, request);
+    return RestResponse.success(page);
+  }
 
-    @ApiOperation(value = "listAlertConfigs")
-    @PostMapping(value = "/listWithOutPage")
-    public RestResponse listAlertConfigs() {
-        List<AlertConfig> page = alertConfigService.list();
-        return RestResponse.success(page);
-    }
+  @ApiOperation(value = "List alert configs")
+  @PostMapping(value = "/listWithOutPage")
+  public RestResponse listAlertConfigs() {
+    List<AlertConfig> page = alertConfigService.list();
+    return RestResponse.success(page);
+  }
 
-    @ApiOperation(value = "deleteAlertConfig")
-    @ApiImplicitParams({
-        @ApiImplicitParam(name = "id", value = "config id", required = true)
-    })
-    @DeleteMapping("/delete")
-    public RestResponse deleteAlertConfig(@NotNull(message = "config id must be not null") Long id) {
-        boolean result = alertConfigService.deleteById(id);
-        return RestResponse.success(result);
-    }
+  @ApiOperation(value = "Delete alert config")
+  @ApiImplicitParams({
+    @ApiImplicitParam(
+        name = "id",
+        value = "config id",
+        required = true,
+        paramType = "query",
+        dataTypeClass = Long.class)
+  })
+  @DeleteMapping("/delete")
+  public RestResponse deleteAlertConfig(
+      @RequestParam("id") @NotNull(message = "config id must be not null") Long id) {
+    boolean result = alertConfigService.deleteById(id);
+    return RestResponse.success(result);
+  }
 
-    /**
-     * TODO after remove to unit test
-     */
-    @PostMapping("/send")
-    public RestResponse sendAlert(Long id) throws AlertException {
-        AlertTemplate alertTemplate = new AlertTemplate();
-        alertTemplate.setTitle("Notify: StreamPark alert job for test");
-        alertTemplate.setJobName("StreamPark alert job for test");
-        alertTemplate.setSubject("StreamPark Alert: Test");
-        alertTemplate.setStatus("TEST");
-        alertTemplate.setType(1);
-        alertTemplate.setRestart(false);
-        Date date = new Date();
-        alertTemplate.setStartTime(DateUtils.format(date, DateUtils.fullFormat(), TimeZone.getDefault()));
-        alertTemplate.setEndTime(DateUtils.format(date, DateUtils.fullFormat(), TimeZone.getDefault()));
-        alertTemplate.setDuration(DateUtils.toRichTimeDuration(0));
-        boolean alert = alertService.alert(AlertConfigWithParams.of(alertConfigService.getById(id)), alertTemplate);
-        return RestResponse.success(alert);
-    }
-
+  /** TODO after remove to unit test */
+  @PostMapping("/send")
+  public RestResponse sendAlert(Long id) throws AlertException {
+    AlertTemplate alertTemplate = new AlertTemplate();
+    alertTemplate.setTitle("Notify: StreamPark alert job for test");
+    alertTemplate.setJobName("StreamPark alert job for test");
+    alertTemplate.setSubject("StreamPark Alert: Test");
+    alertTemplate.setStatus("TEST");
+    alertTemplate.setType(1);
+    alertTemplate.setRestart(false);
+    Date date = new Date();
+    alertTemplate.setStartTime(
+        DateUtils.format(date, DateUtils.fullFormat(), TimeZone.getDefault()));
+    alertTemplate.setEndTime(DateUtils.format(date, DateUtils.fullFormat(), TimeZone.getDefault()));
+    alertTemplate.setDuration("");
+    boolean alert =
+        alertService.alert(AlertConfigWithParams.of(alertConfigService.getById(id)), alertTemplate);
+    return RestResponse.success(alert);
+  }
 }

@@ -32,6 +32,9 @@ on:
       - 'deploy/**'
       - 'script/**'
       - 'streampark-console/streampark-console-webapp/**'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   license-header:
@@ -45,6 +48,19 @@ jobs:
           submodules: true
       - name: Check license header
         uses: apache/skywalking-eyes/header@main
+  code-style:
+    if: github.repository == 'apache/incubator-streampark'
+    name: Code style
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Check codestyle for scala 2.11
+        run: ./mvnw -B -q -nsu -Pscala-2.11,console checkstyle:check spotless:check
+      - name: Check codestyle for scala 2.12
+        run: ./mvnw -B -q -nsu -Pscala-2.12,console checkstyle:check spotless:check
   dead-link:
     if: github.repository == 'apache/incubator-streampark'
     name: Dead links
@@ -58,41 +74,24 @@ jobs:
             markdown-link-check -c .dlc.json -q "$file"
           done
   build:
+    name: "maven-compile ( ${{ matrix.scala }}, java-${{ matrix.java }})"
     runs-on: ubuntu-latest
-    name: Build with Scala_2.11
+    strategy:
+      fail-fast: false
+      matrix:
+        scala: [ scala-2.11, scala-2.12 ]
+        java: [ 8 , 11 ]
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up JDK 8
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
-          java-version: '8'
-          distribution: 'adopt'
-          cache: maven
-      - name: Build with Scala_2.11
-        run: mvn -B clean package -Dscala.version=2.11.12 -Dscala.binary.version=2.11 -DskipTests
+          java-version: ${{ matrix.java }}
+          distribution: "adopt"
+          cache: "maven"
+      - name: Build with Maven
+        run: ./mvnw -B clean package -P${{ matrix.scala }} -Pconsole -DskipTests
       - name: Test with Maven
-        run: mvn -B test -Dscala.version=2.11.12 -Dscala.binary.version=2.11 -pl '!streampark-plugin/streampark-jvm-profiler,!streampark-console/streampark-console-service' -am
-#      - name: Setup Go
-#        uses: actions/setup-go@v3
-#        with:
-#          go-version: '1.16'
-#      - name: Check Dependencies Licenses
-#        run: |
-#          go install github.com/apache/skywalking-eyes/cmd/license-eye@47febf5
-#          license-eye dependency resolve --summary ./dist-material/release-docs/LICENSE.tpl
+        run: ./mvnw -B test -P${{ matrix.scala }} -Pconsole -pl '!streampark-console/streampark-console-service' -am
 
-  build2:
-    runs-on: ubuntu-latest
-    name: Build with Scala_2.12
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up JDK 8
-        uses: actions/setup-java@v3
-        with:
-          java-version: '8'
-          distribution: 'adopt'
-          cache: maven
-      - name: Build with Scala_2.12
-        run: mvn -B clean package -Dscala.version=2.12.8 -Dscala.binary.version=2.12 -DskipTests
-      - name: Test with Maven
-        run: mvn -B test -Dscala.version=2.12.8 -Dscala.binary.version=2.12 -pl '!streampark-plugin/streampark-jvm-profiler,!streampark-console/streampark-console-service' -am

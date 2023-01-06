@@ -20,6 +20,8 @@ import java.util.Properties
 
 import scala.collection.JavaConversions._
 
+import org.apache.streampark.common.conf.ConfigConst
+
 object DorisConfig {
 
   val CSV = "csv"
@@ -72,7 +74,6 @@ class DorisConfig(parameters: Properties) {
     loadUrl.size
   }
 
-
   var currentHostId: Long = 0
 
   def getHostUrl: String = {
@@ -80,10 +81,9 @@ class DorisConfig(parameters: Properties) {
     loadUrl.get((currentHostId % loadUrl.size).toInt)
   }
 
-
   override def toString: String = {
     s"""
-       |{ doris user: $user, password: ******, hosts: ${loadUrl.mkString(",")} }
+       |{ doris user: $user, password: ${ConfigConst.DEFAULT_DATAMASK_STRING}, hosts: ${loadUrl.mkString(",")} }
        |""".stripMargin
   }
 }

@@ -16,19 +16,50 @@
  */
 package org.apache.streampark.common.conf
 
+import java.net.URI
+
 import org.apache.streampark.common.enums.StorageType
 import org.apache.streampark.common.util.{HdfsUtils, SystemPropertyUtils}
 
-import java.net.URI
-
-
 object Workspace {
+
+  def of(storageType: StorageType): Workspace = Workspace(storageType)
 
   lazy val local: Workspace = Workspace.of(StorageType.LFS)
 
   lazy val remote: Workspace = Workspace.of(StorageType.HDFS)
 
-  def of(storageType: StorageType): Workspace = Workspace(storageType)
+  private[this] lazy val localWorkspace = local.WORKSPACE
+
+  /**
+   * local build path
+   */
+  lazy val APP_LOCAL_DIST = s"$localWorkspace/dist"
+
+  /**
+   * dirPath of the maven local repository with built-in compilation process
+   */
+  lazy val MAVEN_LOCAL_PATH = s"$localWorkspace/mvnrepo"
+
+  /**
+   * local sourceCode path.(for git...)
+   */
+  lazy val PROJECT_LOCAL_PATH = s"$localWorkspace/project"
+
+  /**
+   * local log path.
+   */
+  lazy val LOG_LOCAL_PATH = s"$localWorkspace/logs"
+
+  /**
+   * project build log path.
+   */
+  lazy val PROJECT_BUILD_LOG_PATH = s"$LOG_LOCAL_PATH/build_logs"
+
+  /**
+   * project archives path
+   */
+  lazy val ARCHIVES_FILE_PATH = s"${remote.WORKSPACE}/historyserver/archive"
 
 }
 
@@ -46,7 +77,7 @@ case class Workspace(storageType: StorageType) {
     }
   }
 
-  lazy val WORKSPACE: String = {
+  private[conf] lazy val WORKSPACE: String = {
     storageType match {
       case StorageType.LFS =>
         val path: String = getConfigValue[String](CommonConfig.STREAMPARK_WORKSPACE_LOCAL)
@@ -78,7 +109,7 @@ case class Workspace(storageType: StorageType) {
   lazy val APP_CLIENT = s"$WORKSPACE/client"
 
   /**
-   * store flink multi version jars
+   * store flink multi version support jars
    */
   lazy val APP_SHIMS = s"$WORKSPACE/shims"
 
@@ -90,11 +121,6 @@ case class Workspace(storageType: StorageType) {
 
   lazy val APP_BACKUPS = s"$WORKSPACE/backups"
 
-  /**
-   * local build path
-   */
-  lazy val APP_LOCAL_DIST = s"$WORKSPACE/dist"
-
   lazy val APP_SAVEPOINTS = s"$WORKSPACE/savepoints"
 
   /**
@@ -102,25 +128,4 @@ case class Workspace(storageType: StorageType) {
    */
   lazy val APP_JARS = s"$WORKSPACE/jars"
 
-  /**
-   * dirpath of the maven local repository with built-in compilation process
-   */
-  lazy val MAVEN_LOCAL_DIR = s"${Workspace.local.WORKSPACE}/mvnrepo"
-
-  /**
-   * local sourceCode dir.(for git...)
-   */
-  lazy val PROJECT_LOCAL_DIR = s"${Workspace.local.WORKSPACE}/project"
-
-  /**
-   * local log dir.
-   */
-  lazy val LOG_LOCAL_DIR = s"${Workspace.local.WORKSPACE}/logs"
-
-  /**
-   * project build log dir.
-   */
-  lazy val PROJECT_BUILD_LOG_DIR = s"$LOG_LOCAL_DIR/build_logs"
-
 }
-

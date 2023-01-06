@@ -20,11 +20,11 @@ package org.apache.streampark.console.core.service.impl;
 import org.apache.streampark.console.base.domain.Constant;
 import org.apache.streampark.console.base.domain.RestRequest;
 import org.apache.streampark.console.base.mybatis.pager.MybatisPager;
-import org.apache.streampark.console.core.entity.Application;
 import org.apache.streampark.console.core.entity.ApplicationLog;
 import org.apache.streampark.console.core.mapper.ApplicationLogMapper;
 import org.apache.streampark.console.core.service.ApplicationLogService;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -39,14 +39,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class ApplicationLogServiceImpl extends ServiceImpl<ApplicationLogMapper, ApplicationLog>
     implements ApplicationLogService {
 
-    @Override
-    public IPage<ApplicationLog> page(ApplicationLog applicationLog, RestRequest request) {
-        Page<Application> page = new MybatisPager<Application>().getPage(request, "option_time", Constant.ORDER_DESC);
-        return this.baseMapper.page(page, applicationLog.getAppId());
-    }
+  @Override
+  public IPage<ApplicationLog> page(ApplicationLog applicationLog, RestRequest request) {
+    Page<ApplicationLog> page =
+        new MybatisPager<ApplicationLog>().getPage(request, "option_time", Constant.ORDER_DESC);
+    LambdaQueryWrapper<ApplicationLog> queryWrapper =
+        new LambdaQueryWrapper<ApplicationLog>()
+            .eq(ApplicationLog::getAppId, applicationLog.getAppId());
+    return this.page(page, queryWrapper);
+  }
 
-    @Override
-    public void removeApp(Long appId) {
-        baseMapper.removeApp(appId);
-    }
+  @Override
+  public void removeApp(Long appId) {
+    LambdaQueryWrapper<ApplicationLog> queryWrapper =
+        new LambdaQueryWrapper<ApplicationLog>().eq(ApplicationLog::getAppId, appId);
+    this.remove(queryWrapper);
+  }
 }

@@ -25,7 +25,6 @@ INFRA:
 BUILD:
   - ".husky/**/*"
   - ".mvn/**/*"
-  - "script/update_version.py"
   - "tools/checkstyle/*"
   - "build.sh"
   - "mvnw"
@@ -42,12 +41,10 @@ DOCS:
 
 WEB UI:
   - "streampark-console/streampark-console-webapp/**/*"
-  - "streampark-console/streampark-console-newui/**/*"
 
 BACKEND:
   - "streampark-console/streampark-console-service/**/*"
   - "streampark-common/**/*"
-  - "streampark-plugin/**/*"
 
 FLINK:
   - "streampark-flink/**/*"

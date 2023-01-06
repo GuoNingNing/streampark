@@ -19,10 +19,16 @@ package org.apache.streampark.console.system.service.impl;
 
 import org.apache.streampark.common.util.AssertUtils;
 import org.apache.streampark.console.base.domain.RestRequest;
+import org.apache.streampark.console.base.exception.ApiAlertException;
 import org.apache.streampark.console.core.enums.UserType;
+import org.apache.streampark.console.core.service.ApplicationService;
+import org.apache.streampark.console.core.service.CommonService;
+import org.apache.streampark.console.core.service.ProjectService;
+import org.apache.streampark.console.core.service.VariableService;
 import org.apache.streampark.console.system.entity.Team;
 import org.apache.streampark.console.system.entity.User;
 import org.apache.streampark.console.system.mapper.TeamMapper;
+import org.apache.streampark.console.system.service.MemberService;
 import org.apache.streampark.console.system.service.TeamService;
 import org.apache.streampark.console.system.service.UserService;
 
@@ -45,59 +51,103 @@ import java.util.Optional;
 @Transactional(propagation = Propagation.SUPPORTS, readOnly = true, rollbackFor = Exception.class)
 public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements TeamService {
 
-    @Autowired
-    private UserService userService;
+  @Autowired private UserService userService;
 
-    @Override
-    public IPage<Team> findTeams(Team team, RestRequest request) {
-        Page<Team> page = new Page<>();
-        page.setCurrent(request.getPageNum());
-        page.setSize(request.getPageSize());
-        return this.baseMapper.findTeam(page, team);
+  @Autowired private ApplicationService applicationService;
+
+  @Autowired private ProjectService projectService;
+
+  @Autowired private MemberService memberService;
+
+  @Autowired private VariableService variableService;
+
+  @Autowired private CommonService commonService;
+
+  @Override
+  public IPage<Team> findTeams(Team team, RestRequest request) {
+    Page<Team> page = new Page<>();
+    page.setCurrent(request.getPageNum());
+    page.setSize(request.getPageSize());
+    return this.baseMapper.findTeam(page, team);
+  }
+
+  @Override
+  public Team findByName(String teamName) {
+    LambdaQueryWrapper<Team> queryWrapper =
+        new LambdaQueryWrapper<Team>().eq(Team::getTeamName, teamName);
+    return baseMapper.selectOne(queryWrapper);
+  }
+
+  @Override
+  public void createTeam(Team team) {
+    Team existedTeam = findByName(team.getTeamName());
+    if (existedTeam != null) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Team name [%s] was found, please rename and try again.", team.getTeamName()));
+    }
+    team.setId(null);
+    team.setCreateTime(new Date());
+    team.setModifyTime(team.getCreateTime());
+    this.save(team);
+  }
+
+  @Override
+  public void deleteTeam(Long teamId) {
+    log.info("{} Proceed delete team[Id={}]", commonService.getCurrentUser().getUsername(), teamId);
+    Team team = this.getById(teamId);
+    // TODO The AssertUtils.checkApiAlert can simplify the exception.
+    if (team == null) {
+      throw new ApiAlertException(String.format("The team[Id=%s] doesn't exists.", teamId));
+    }
+    if (applicationService.existsByTeamId(teamId)) {
+      throw new ApiAlertException(
+          String.format(
+              "Please delete the applications under the team[name=%s] first!", team.getTeamName()));
+    }
+    if (projectService.existsByTeamId(teamId)) {
+      throw new ApiAlertException(
+          String.format(
+              "Please delete the projects under the team[name=%s] first!", team.getTeamName()));
+    }
+    if (variableService.existsByTeamId(teamId)) {
+      throw new ApiAlertException(
+          String.format(
+              "Please delete the variables under the team[name=%s] first!", team.getTeamName()));
     }
 
-    @Override
-    public Team findByName(String teamName) {
-        return baseMapper.selectOne(new LambdaQueryWrapper<Team>().eq(Team::getTeamName, teamName));
-    }
+    memberService.deleteByTeamId(teamId);
+    userService.clearLastTeam(teamId);
+    this.removeById(teamId);
+  }
 
-    @Override
-    public void createTeam(Team team) {
-        Team existedTeam = findByName(team.getTeamName());
-        if (existedTeam != null) {
-            throw new IllegalArgumentException(String.format("Team name [%s] was found, please rename and try again.", team.getTeamName()));
-        }
-        team.setId(null);
-        team.setCreateTime(new Date());
-        team.setModifyTime(team.getCreateTime());
-        this.save(team);
-    }
+  @Override
+  public void updateTeam(Team team) {
+    Team oldTeam =
+        Optional.ofNullable(this.getById(team))
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        String.format("Team id [id=%s] not found", team.getId())));
+    AssertUtils.isTrue(
+        oldTeam.getTeamName().equals(team.getTeamName()), "Team name cannot be changed.");
+    oldTeam.setDescription(team.getDescription());
+    oldTeam.setModifyTime(new Date());
+    updateById(oldTeam);
+  }
 
-    @Override
-    public void deleteTeam(Team team) {
-        // TODO 查询 app 和 project，如果还有 app 或 project 没有删除，则 team 不能被删除。
-        this.removeById(team);
+  @Override
+  public List<Team> findUserTeams(Long userId) {
+    User user =
+        Optional.ofNullable(userService.getById(userId))
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        String.format("The userId [%s] not found", userId)));
+    // Admin has the permission for all teams.
+    if (UserType.ADMIN.equals(user.getUserType())) {
+      return this.list();
     }
-
-    @Override
-    public void updateTeam(Team team) {
-        Team oldTeam = Optional.ofNullable(this.getById(team))
-            .orElseThrow(() -> new IllegalArgumentException(String.format("Team id [id=%s] not found", team.getId())));
-        AssertUtils.isTrue(oldTeam.getTeamName().equals(team.getTeamName()), "Team name cannot be changed.");
-        oldTeam.setDescription(team.getDescription());
-        oldTeam.setModifyTime(new Date());
-        updateById(oldTeam);
-    }
-
-    @Override
-    public List<Team> findUserTeams(Long userId) {
-        User user = Optional.ofNullable(userService.getById(userId))
-            .orElseThrow(() -> new IllegalArgumentException(String.format("The userId [%s] not found", userId)));
-        // Admin has the permission for all teams.
-        if (UserType.ADMIN.equals(user.getUserType())) {
-            return this.list();
-        }
-        return baseMapper.findUserTeams(userId);
-    }
-
+    return baseMapper.findUserTeams(userId);
+  }
 }

@@ -44,87 +44,82 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @Transactional(propagation = Propagation.SUPPORTS, readOnly = true, rollbackFor = Exception.class)
 public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements RoleService {
 
-    @Autowired
-    private RoleMenuMapper roleMenuMapper;
+  @Autowired private RoleMenuMapper roleMenuMapper;
 
-    @Autowired
-    private MemberService memberService;
+  @Autowired private MemberService memberService;
 
-    @Autowired
-    private RoleMenuServie roleMenuService;
+  @Autowired private RoleMenuServie roleMenuService;
 
-    @Override
-    public Set<String> getUserRoleName(String username) {
-        List<Role> roleList = this.findUserRole(username);
-        return roleList.stream().map(Role::getRoleName).collect(Collectors.toSet());
+  @Override
+  public IPage<Role> findRoles(Role role, RestRequest request) {
+    Page<Role> page = new Page<>();
+    page.setCurrent(request.getPageNum());
+    page.setSize(request.getPageSize());
+    return this.baseMapper.findRole(page, role);
+  }
+
+  @Override
+  public Role findByName(String roleName) {
+    return baseMapper.selectOne(new LambdaQueryWrapper<Role>().eq(Role::getRoleName, roleName));
+  }
+
+  @Override
+  public void createRole(Role role) {
+    role.setCreateTime(new Date());
+    this.save(role);
+
+    String[] menuIds = role.getMenuId().split(StringPool.COMMA);
+    setRoleMenus(role, menuIds);
+  }
+
+  @Override
+  public void deleteRole(Long roleId) {
+    Role role =
+        Optional.ofNullable(this.getById(roleId))
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(String.format("Role id [%s] not found", roleId)));
+    List<Long> userIdsByRoleId = memberService.findUserIdsByRoleId(roleId);
+    AssertUtils.isTrue(
+        userIdsByRoleId == null || userIdsByRoleId.isEmpty(),
+        String.format(
+            "There are some users are bound to role %s , please unbind it first.",
+            role.getRoleName()));
+    this.removeById(roleId);
+    this.roleMenuService.deleteByRoleId(roleId);
+  }
+
+  @Override
+  public void updateRole(Role role) {
+    role.setModifyTime(new Date());
+    baseMapper.updateById(role);
+    LambdaQueryWrapper<RoleMenu> queryWrapper =
+        new LambdaQueryWrapper<RoleMenu>().eq(RoleMenu::getRoleId, role.getRoleId());
+    roleMenuMapper.delete(queryWrapper);
+
+    String menuId = role.getMenuId();
+    if (StringUtils.contains(menuId, Constant.APP_DETAIL_MENU_ID)
+        && !StringUtils.contains(menuId, Constant.APP_MENU_ID)) {
+      menuId = menuId + StringPool.COMMA + Constant.APP_MENU_ID;
     }
+    String[] menuIds = menuId.split(StringPool.COMMA);
+    setRoleMenus(role, menuIds);
+  }
 
-    @Override
-    public IPage<Role> findRoles(Role role, RestRequest request) {
-        Page<Role> page = new Page<>();
-        page.setCurrent(request.getPageNum());
-        page.setSize(request.getPageSize());
-        return this.baseMapper.findRole(page, role);
-    }
-
-    @Override
-    public List<Role> findUserRole(String userName) {
-        return baseMapper.findUserRole(userName);
-    }
-
-    @Override
-    public Role findByName(String roleName) {
-        return baseMapper.selectOne(new LambdaQueryWrapper<Role>().eq(Role::getRoleName, roleName));
-    }
-
-    @Override
-    public void createRole(Role role) {
-        role.setCreateTime(new Date());
-        this.save(role);
-
-        String[] menuIds = role.getMenuId().split(StringPool.COMMA);
-        setRoleMenus(role, menuIds);
-    }
-
-    @Override
-    public void deleteRole(Long roleId) {
-        Role role = Optional.ofNullable(this.getById(roleId))
-            .orElseThrow(() -> new IllegalArgumentException(String.format("Role id [%s] not found", roleId)));
-        List<Long> userIdsByRoleId = memberService.findUserIdsByRoleId(roleId);
-        AssertUtils.isTrue(userIdsByRoleId == null || userIdsByRoleId.isEmpty(),
-            String.format("There are some users are bound to role %s , please unbind it first.", role.getRoleName()));
-        this.removeById(roleId);
-        this.roleMenuService.deleteRoleMenusByRoleId(roleId);
-    }
-
-    @Override
-    public void updateRole(Role role) {
-        role.setModifyTime(new Date());
-        baseMapper.updateById(role);
-        roleMenuMapper.delete(
-            new LambdaQueryWrapper<RoleMenu>().eq(RoleMenu::getRoleId, role.getRoleId()));
-        String menuId = role.getMenuId();
-        if (StringUtils.contains(menuId, Constant.APP_DETAIL_MENU_ID) && !StringUtils.contains(menuId, Constant.APP_MENU_ID)) {
-            menuId = menuId + StringPool.COMMA + Constant.APP_MENU_ID;
-        }
-        String[] menuIds = menuId.split(StringPool.COMMA);
-        setRoleMenus(role, menuIds);
-    }
-
-    private void setRoleMenus(Role role, String[] menuIds) {
-        Arrays.stream(menuIds).forEach(menuId -> {
-            RoleMenu rm = new RoleMenu();
-            rm.setMenuId(Long.valueOf(menuId));
-            rm.setRoleId(role.getRoleId());
-            this.roleMenuMapper.insert(rm);
-        });
-    }
+  private void setRoleMenus(Role role, String[] menuIds) {
+    Arrays.stream(menuIds)
+        .forEach(
+            menuId -> {
+              RoleMenu rm = new RoleMenu();
+              rm.setMenuId(Long.valueOf(menuId));
+              rm.setRoleId(role.getRoleId());
+              this.roleMenuMapper.insert(rm);
+            });
+  }
 }

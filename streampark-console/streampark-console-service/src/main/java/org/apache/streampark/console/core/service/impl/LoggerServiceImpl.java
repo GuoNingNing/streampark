@@ -17,6 +17,7 @@
 
 package org.apache.streampark.console.core.service.impl;
 
+import org.apache.streampark.console.base.util.WebUtils;
 import org.apache.streampark.console.core.service.LogClientService;
 import org.apache.streampark.console.core.service.LoggerService;
 import org.apache.streampark.flink.kubernetes.helper.KubernetesDeploymentHelper;
@@ -25,43 +26,40 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-/**
- * log service
- */
+/** log service */
 @Service
 @Slf4j
 public class LoggerServiceImpl implements LoggerService {
 
-    @Autowired
-    private LogClientService logClient;
+  @Autowired private LogClientService logClient;
 
-    /**
-     * view log
-     *
-     * @param skipLineNum skip line number
-     * @param limit       limit
-     * @return log string data
-     */
-    public CompletionStage<String> queryLog(String nameSpace, String jobName, int skipLineNum, int limit) {
-        return CompletableFuture.supplyAsync(() -> jobDeploymentsWatch(nameSpace, jobName)
-        ).exceptionally(e -> {
-            try {
-                return String.format("%s/%s_%s_err.log", new File("").getCanonicalPath(), nameSpace, jobName);
-            } catch (IOException ex) {
+  /**
+   * view log
+   *
+   * @param skipLineNum skip line number
+   * @param limit limit
+   * @return log string data
+   */
+  @Override
+  public CompletionStage<String> queryLog(
+      String nameSpace, String jobName, String jobId, int skipLineNum, int limit) {
+    return CompletableFuture.supplyAsync(() -> jobDeploymentsWatch(nameSpace, jobName, jobId))
+        .exceptionally(
+            e -> {
+              try {
+                return String.format("%s/%s_err.log", WebUtils.getAppTempDir(), jobId);
+              } catch (Exception ex) {
                 log.error("Generate log path exception:{}", ex.getMessage());
                 return null;
-            }
-        }).thenApply(path -> logClient.rollViewLog(String.valueOf(path), skipLineNum, limit));
-    }
+              }
+            })
+        .thenApply(path -> logClient.rollViewLog(String.valueOf(path), skipLineNum, limit));
+  }
 
-    private String jobDeploymentsWatch(String nameSpace, String jobName) {
-        return KubernetesDeploymentHelper.watchDeploymentLog(nameSpace, jobName);
-    }
+  private String jobDeploymentsWatch(String nameSpace, String jobName, String jobId) {
+    return KubernetesDeploymentHelper.watchDeploymentLog(nameSpace, jobName, jobId);
+  }
 }
-
-

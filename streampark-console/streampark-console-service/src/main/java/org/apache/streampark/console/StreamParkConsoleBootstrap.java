@@ -29,6 +29,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import java.io.File;
 
 /**
+ *
+ *
  * <pre>
  *
  *      _____ __                                             __
@@ -39,30 +41,31 @@ import java.io.File;
  *                                     /_/
  *
  *   WebSite:  https://streampark.apache.org
- *   GitHub :  https://github.com/apache/streampark
+ *   GitHub :  https://github.com/apache/incubator-streampark
  *
  *   [StreamPark] Make stream processing easier ô~ô!
  *
  * </pre>
- *
  */
 @Slf4j
 @SpringBootApplication
 @EnableScheduling
 public class StreamParkConsoleBootstrap {
 
-    public static void main(String[] args) {
-        SpringApplication application = new SpringApplication(StreamParkConsoleBootstrap.class);
-        String pid = SystemPropertyUtils.get("pid");
-        if (pid != null) {
-            application.addListeners(new ApplicationPidFileWriter(pid));
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                log.info("application shutdown now, pid: " + CommonUtils.getPid());
-                File pidFile = new File(pid);
-                pidFile.delete();
-            }));
-        }
-        application.run();
+  public static void main(String[] args) {
+    SpringApplication application = new SpringApplication(StreamParkConsoleBootstrap.class);
+    String pid = SystemPropertyUtils.get("pid");
+    if (pid != null) {
+      application.addListeners(new ApplicationPidFileWriter(pid));
+      Runtime.getRuntime()
+          .addShutdownHook(
+              new Thread(
+                  () -> {
+                    log.info("application shutdown now, pid: " + CommonUtils.getPid());
+                    File pidFile = new File(pid);
+                    pidFile.delete();
+                  }));
     }
-
+    application.run();
+  }
 }

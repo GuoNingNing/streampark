@@ -18,31 +18,32 @@
 package org.apache.streampark.console.core.entity;
 
 import org.apache.streampark.console.core.enums.GitAuthorizedError;
+import org.apache.streampark.console.core.enums.GitCredential;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-public class GitTest {
+class GitTest {
 
-    private final Project project = new Project();
+  private final Project project = new Project();
 
-    @BeforeEach
-    public void before() {
-        project.setUrl("https://github.com/streamxhub/streampark-quickstart");
-    }
+  @BeforeEach
+  void before() {
+    project.setUrl("https://github.com/apache/incubator-streampark.git");
+    project.setGitCredential(GitCredential.HTTPS.getValue());
+  }
 
-    @Test
-    public void getBranchs() {
-        List<String> branches = project.getAllBranches();
-        branches.forEach(System.out::println);
-    }
+  @Test
+  void getBranchs() {
+    List<String> branches = project.getAllBranches();
+    branches.forEach(System.out::println);
+  }
 
-    @Test
-    public void auth() {
-        GitAuthorizedError error = project.gitCheck();
-        System.out.println(error);
-    }
-
+  @Test
+  void auth() {
+    GitAuthorizedError error = project.gitCheck();
+    System.out.println(error);
+  }
 }

@@ -22,16 +22,16 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 
-public class AlertTypeTest {
-    @Test
-    void decodeTest() {
-        List<AlertType> notifyTypes = AlertType.decode(5);
-        System.out.println(notifyTypes);
-    }
+class AlertTypeTest {
+  @Test
+  void decodeTest() {
+    List<AlertType> notifyTypes = AlertType.decode(5);
+    System.out.println(notifyTypes);
+  }
 
-    @Test
-    void encodeTest() {
-        int level = AlertType.encode(Arrays.asList(AlertType.dingTalk, AlertType.email));
-        System.out.println(level);
-    }
+  @Test
+  void encodeTest() {
+    int level = AlertType.encode(Arrays.asList(AlertType.DING_TALK, AlertType.EMAIL));
+    System.out.println(level);
+  }
 }

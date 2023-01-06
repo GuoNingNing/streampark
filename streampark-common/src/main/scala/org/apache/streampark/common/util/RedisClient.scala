@@ -17,14 +17,17 @@
 
 package org.apache.streampark.common.util
 
-import redis.clients.jedis._
-import redis.clients.jedis.exceptions.JedisConnectionException
-
 import java.util.concurrent.ConcurrentHashMap
+
 import scala.annotation.meta.getter
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scala.util.Random
+
+import redis.clients.jedis._
+import redis.clients.jedis.exceptions.JedisConnectionException
+
+import org.apache.streampark.common.conf.ConfigConst
 
 object RedisClient extends Logger {
 
@@ -49,7 +52,8 @@ object RedisClient extends Logger {
     try {
       connect(endpoints(index))
     } catch {
-      case e: Exception => logger.error(e.getMessage)
+      case e: Exception =>
+        logger.error(e.getMessage)
         connect(endpoints.drop(index))
     }
   }
@@ -68,8 +72,7 @@ object RedisClient extends Logger {
       try {
         conn = pool.getResource
       } catch {
-        case e: JedisConnectionException if e.getCause.toString.
-          contains("ERR max number of clients reached") => {
+        case e: JedisConnectionException if e.getCause.toString.contains("ERR max number of clients reached") => {
           if (sleepTime < 500) sleepTime *= 2
           Thread.sleep(sleepTime)
         }
@@ -86,7 +89,7 @@ object RedisClient extends Logger {
    * @return
    */
   def createJedisPool(endpoint: RedisEndpoint): JedisPool = {
-    val endpointEn: RedisEndpoint = endpoint.copy(auth = "********")
+    val endpointEn: RedisEndpoint = endpoint.copy(auth = ConfigConst.DEFAULT_DATAMASK_STRING)
     logInfo(s"[StreamPark] RedisClient: createJedisPool with $endpointEn ")
     new JedisPool(poolConfig, endpoint.host, endpoint.port, endpoint.timeout, endpoint.auth, endpoint.db)
   }
@@ -113,10 +116,11 @@ object RedisClient extends Logger {
   def connectCluster(res: RedisEndpoint*): JedisCluster = {
     require(res.nonEmpty, "[StreamPark] The RedisEndpoint array is empty!!!")
     val head = res.head
-    val cluster = clusters.getOrElseUpdate(head, {
-      val hostPorts = res.map(r => new HostAndPort(r.host, r.port)).toSet
-      new JedisCluster(hostPorts, head.timeout, 1000, 1, head.auth, poolConfig)
-    })
+    val cluster = clusters.getOrElseUpdate(
+      head, {
+        val hostPorts = res.map(r => new HostAndPort(r.host, r.port)).toSet
+        new JedisCluster(hostPorts, head.timeout, 1000, 1, head.auth, poolConfig)
+      })
     cluster
   }
 

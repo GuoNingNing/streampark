@@ -17,10 +17,10 @@
 
 package org.apache.streampark.flink.submit.impl
 
-import org.apache.streampark.common.conf.ConfigConst.KEY_YARN_APP_ID
-import org.apache.streampark.common.util.Utils
-import org.apache.streampark.flink.submit.`trait`.YarnSubmitTrait
-import org.apache.streampark.flink.submit.bean._
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ListBuffer
+
 import org.apache.flink.api.common.JobID
 import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader
 import org.apache.flink.client.program.{ClusterClient, PackagedProgram}
@@ -33,9 +33,9 @@ import org.apache.hadoop.yarn.api.records.{ApplicationId, FinalApplicationStatus
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ListBuffer
+import org.apache.streampark.common.util.Utils
+import org.apache.streampark.flink.submit.`trait`.YarnSubmitTrait
+import org.apache.streampark.flink.submit.bean._
 
 /**
  * Submit Job to YARN Session Cluster
@@ -49,8 +49,6 @@ object YarnSessionSubmit extends YarnSubmitTrait {
   override def setConfig(submitRequest: SubmitRequest, flinkConfig: Configuration): Unit = {
     flinkConfig
       .safeSet(DeploymentOptions.TARGET, YarnDeploymentTarget.SESSION.getName)
-      .safeSet(YarnConfigOptions.APPLICATION_ID, submitRequest.extraParameter.get(KEY_YARN_APP_ID).toString)
-
     logInfo(
       s"""
          |------------------------------------------------------------------
@@ -71,7 +69,8 @@ object YarnSessionSubmit extends YarnSubmitTrait {
       logDebug(s"kerberos Security is Enabled...")
       val useTicketCache = flinkDefaultConfiguration.get(SecurityOptions.KERBEROS_LOGIN_USETICKETCACHE)
       if (!HadoopUtils.areKerberosCredentialsValid(currentUser, useTicketCache)) {
-        throw new RuntimeException(s"Hadoop security with Kerberos is enabled but the login user ${currentUser} does not have Kerberos credentials or delegation tokens!")
+        throw new RuntimeException(
+          s"Hadoop security with Kerberos is enabled but the login user ${currentUser} does not have Kerberos credentials or delegation tokens!")
       }
     }
     val providedLibs = {
@@ -79,19 +78,17 @@ object YarnSessionSubmit extends YarnSubmitTrait {
         deployRequest.hdfsWorkspace.flinkLib,
         deployRequest.hdfsWorkspace.flinkPlugins,
         deployRequest.hdfsWorkspace.appJars,
-        deployRequest.hdfsWorkspace.appPlugins
-      )
+        deployRequest.hdfsWorkspace.appPlugins)
       array.toList
     }
 
     flinkConfig
-      //yarn.provided.lib.dirs
+      // yarn.provided.lib.dirs
       .safeSet(YarnConfigOptions.PROVIDED_LIB_DIRS, providedLibs.asJava)
-      //flinkDistJar
+      // flinkDistJar
       .safeSet(YarnConfigOptions.FLINK_DIST_JAR, deployRequest.hdfsWorkspace.flinkDistJar)
       //
       .safeSet(DeploymentOptions.TARGET, YarnDeploymentTarget.SESSION.getName)
-
       .safeSet(DeploymentOptionsInternal.CONF_DIR, s"${deployRequest.flinkVersion.flinkHome}/conf")
 
     logInfo(
@@ -116,6 +113,7 @@ object YarnSessionSubmit extends YarnSubmitTrait {
 
       client = clusterDescriptor.retrieve(yarnClusterId).getClusterClient
       val jobId = client.submitJob(jobGraph).get().toString
+      val jobManagerUrl = client.getWebInterfaceURL
 
       logInfo(
         s"""
@@ -123,7 +121,7 @@ object YarnSessionSubmit extends YarnSubmitTrait {
            |Flink Job Started: jobId: $jobId , applicationId: ${yarnClusterId.toString}
            |__________________________________________________________________
            |""".stripMargin)
-      SubmitResponse(yarnClusterId.toString, flinkConfig.toMap, jobId)
+      SubmitResponse(yarnClusterId.toString, flinkConfig.toMap, jobId, jobManagerUrl)
     } catch {
       case e: Exception =>
         logError(s"submit flink job fail in ${submitRequest.executionMode} mode")
@@ -138,8 +136,9 @@ object YarnSessionSubmit extends YarnSubmitTrait {
   }
 
   override def doCancel(cancelRequest: CancelRequest, flinkConfig: Configuration): CancelResponse = {
-    flinkConfig.safeSet(YarnConfigOptions.APPLICATION_ID, cancelRequest.extraParameter.get(KEY_YARN_APP_ID).toString)
-    flinkConfig.safeSet(DeploymentOptions.TARGET, YarnDeploymentTarget.SESSION.getName)
+    flinkConfig
+      .safeSet(YarnConfigOptions.APPLICATION_ID, cancelRequest.clusterId)
+      .safeSet(DeploymentOptions.TARGET, YarnDeploymentTarget.SESSION.getName)
     logInfo(
       s"""
          |------------------------------------------------------------------
@@ -154,10 +153,11 @@ object YarnSessionSubmit extends YarnSubmitTrait {
       clusterDescriptor = yarnClusterDescriptor._2
       client = clusterDescriptor.retrieve(yarnClusterDescriptor._1).getClusterClient
       val jobID = JobID.fromHexString(cancelRequest.jobId)
-      val actionResult = cancelJob(cancelRequest, jobID, client)
+      val actionResult = super.cancelJob(cancelRequest, jobID, client)
       CancelResponse(actionResult)
     } catch {
-      case e: Exception => logError(s"stop flink yarn session job fail")
+      case e: Exception =>
+        logError(s"stop flink yarn session job fail")
         e.printStackTrace()
         throw e
     } finally {
@@ -173,26 +173,24 @@ object YarnSessionSubmit extends YarnSubmitTrait {
          |    flinkVersion     : ${deployRequest.flinkVersion.version}
          |    execMode         : ${deployRequest.executionMode.name()}
          |    clusterId        : ${deployRequest.clusterId}
-         |    resolveOrder     : ${deployRequest.resolveOrder.getName}
-         |    flameGraph       : ${deployRequest.flameGraph != null}
-         |    dynamicOption    : ${deployRequest.dynamicOption.mkString(" ")}
+         |    properties       : ${deployRequest.properties.mkString(" ")}
          |-------------------------------------------------------------------------------------------
          |""".stripMargin)
     var clusterDescriptor: YarnClusterDescriptor = null
     var client: ClusterClient[ApplicationId] = null
     try {
-      val flinkConfig = extractConfiguration(deployRequest.flinkVersion.flinkHome,
-        deployRequest.dynamicOption,
-        deployRequest.extraParameter,
-        deployRequest.resolveOrder)
+      val flinkConfig = extractConfiguration(
+        deployRequest.flinkVersion.flinkHome,
+        deployRequest.properties)
       setConfig(deployRequest, flinkConfig)
       val yarnClusterDescriptor = getSessionClusterDeployDescriptor(flinkConfig)
       clusterDescriptor = yarnClusterDescriptor._2
       if (null != deployRequest.clusterId && deployRequest.clusterId.nonEmpty) {
         try {
-          val applicationStatus = clusterDescriptor.getYarnClient.getApplicationReport(ConverterUtils.toApplicationId(deployRequest.clusterId)).getFinalApplicationStatus
+          val applicationStatus =
+            clusterDescriptor.getYarnClient.getApplicationReport(ConverterUtils.toApplicationId(deployRequest.clusterId)).getFinalApplicationStatus
           if (FinalApplicationStatus.UNDEFINED.equals(applicationStatus)) {
-            //application is running
+            // application is running
             val yarnClient = clusterDescriptor.retrieve(ApplicationId.fromString(deployRequest.clusterId)).getClusterClient
             if (yarnClient.getWebInterfaceURL != null) {
               return DeployResponse(yarnClient.getWebInterfaceURL, yarnClient.getClusterId.toString)
@@ -210,7 +208,8 @@ object YarnSessionSubmit extends YarnSubmitTrait {
         null
       }
     } catch {
-      case e: Exception => logError(s"start flink session fail in ${deployRequest.executionMode} mode")
+      case e: Exception =>
+        logError(s"start flink session fail in ${deployRequest.executionMode} mode")
         e.printStackTrace()
         throw e
     } finally {
@@ -223,22 +222,27 @@ object YarnSessionSubmit extends YarnSubmitTrait {
     var client: ClusterClient[ApplicationId] = null
     try {
       val flinkConfig = getFlinkDefaultConfiguration(shutDownRequest.flinkVersion.flinkHome)
-      shutDownRequest.extraParameter.foreach(m => m._2 match {
-        case v if v != null => flinkConfig.setString(m._1, m._2.toString)
-        case _ =>
-      })
+      shutDownRequest.properties.foreach(m =>
+        m._2 match {
+          case v if v != null => flinkConfig.setString(m._1, m._2.toString)
+          case _ =>
+        })
       flinkConfig.safeSet(YarnConfigOptions.APPLICATION_ID, shutDownRequest.clusterId)
       flinkConfig.safeSet(DeploymentOptions.TARGET, YarnDeploymentTarget.SESSION.getName)
       val yarnClusterDescriptor = getSessionClusterDescriptor(flinkConfig)
       clusterDescriptor = yarnClusterDescriptor._2
-      if (FinalApplicationStatus.UNDEFINED.equals(clusterDescriptor.getYarnClient.getApplicationReport(ApplicationId.fromString(shutDownRequest.clusterId)).getFinalApplicationStatus)) {
+      if (FinalApplicationStatus.UNDEFINED.equals(
+          clusterDescriptor.getYarnClient.getApplicationReport(ApplicationId.fromString(shutDownRequest.clusterId)).getFinalApplicationStatus)) {
         val clientProvider = clusterDescriptor.retrieve(yarnClusterDescriptor._1)
-        clientProvider.getClusterClient.shutDownCluster()
+        client = clientProvider.getClusterClient
+        client.shutDownCluster()
       }
-      logInfo(s"the ${shutDownRequest.clusterId}'s final status is ${clusterDescriptor.getYarnClient.getApplicationReport(ConverterUtils.toApplicationId(shutDownRequest.clusterId)).getFinalApplicationStatus}")
+      logInfo(s"the ${shutDownRequest.clusterId}'s final status is ${clusterDescriptor.getYarnClient.getApplicationReport(
+          ConverterUtils.toApplicationId(shutDownRequest.clusterId)).getFinalApplicationStatus}")
       ShutDownResponse()
     } catch {
-      case e: Exception => logError(s"shutdown flink session fail in ${shutDownRequest.executionMode} mode")
+      case e: Exception =>
+        logError(s"shutdown flink session fail in ${shutDownRequest.executionMode} mode")
         e.printStackTrace()
         throw e
     } finally {

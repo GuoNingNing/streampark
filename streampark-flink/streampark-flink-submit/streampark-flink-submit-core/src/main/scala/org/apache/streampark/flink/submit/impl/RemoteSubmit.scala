@@ -17,19 +17,20 @@
 
 package org.apache.streampark.flink.submit.impl
 
-import org.apache.streampark.common.util.Utils
-import org.apache.streampark.flink.submit.`trait`.FlinkSubmitTrait
-import org.apache.streampark.flink.submit.bean.{CancelRequest, CancelResponse, SubmitRequest, SubmitResponse}
-import org.apache.streampark.flink.submit.tool.FlinkSessionSubmitHelper
+import java.io.File
+import java.lang.{Integer => JavaInt}
+
+import scala.util.{Failure, Success, Try}
+
 import org.apache.flink.api.common.JobID
 import org.apache.flink.client.deployment.{DefaultClusterClientServiceLoader, StandaloneClusterDescriptor, StandaloneClusterId}
 import org.apache.flink.client.program.{ClusterClient, PackagedProgram}
 import org.apache.flink.configuration._
 
-import java.io.File
-import java.lang.{Integer => JavaInt}
-import scala.util.{Failure, Success, Try}
-
+import org.apache.streampark.common.util.Utils
+import org.apache.streampark.flink.submit.`trait`.FlinkSubmitTrait
+import org.apache.streampark.flink.submit.bean.{CancelRequest, CancelResponse, SubmitRequest, SubmitResponse}
+import org.apache.streampark.flink.submit.tool.FlinkSessionSubmitHelper
 
 /**
  * Submit Job to Remote Cluster
@@ -40,18 +41,7 @@ object RemoteSubmit extends FlinkSubmitTrait {
    * @param submitRequest
    * @param flinkConfig
    */
-  override def setConfig(submitRequest: SubmitRequest, flinkConfig: Configuration): Unit = {
-    flinkConfig
-      .safeSet(RestOptions.ADDRESS, submitRequest.extraParameter.get(RestOptions.ADDRESS.key()).toString)
-      .safeSet[JavaInt](RestOptions.PORT, submitRequest.extraParameter.get(RestOptions.PORT.key()).toString.toInt)
-
-    logInfo(
-      s"""
-         |------------------------------------------------------------------
-         |Effective submit configuration: $flinkConfig
-         |------------------------------------------------------------------
-         |""".stripMargin)
-  }
+  override def setConfig(submitRequest: SubmitRequest, flinkConfig: Configuration): Unit = {}
 
   override def doSubmit(submitRequest: SubmitRequest, flinkConfig: Configuration): SubmitResponse = {
     // 2) submit job
@@ -62,8 +52,8 @@ object RemoteSubmit extends FlinkSubmitTrait {
   override def doCancel(cancelRequest: CancelRequest, flinkConfig: Configuration): CancelResponse = {
     flinkConfig
       .safeSet(DeploymentOptions.TARGET, cancelRequest.executionMode.getName)
-      .safeSet(RestOptions.ADDRESS, cancelRequest.extraParameter.get(RestOptions.ADDRESS.key()).toString)
-      .safeSet[JavaInt](RestOptions.PORT, cancelRequest.extraParameter.get(RestOptions.PORT.key()).toString.toInt)
+      .safeSet(RestOptions.ADDRESS, cancelRequest.properties.get(RestOptions.ADDRESS.key()).toString)
+      .safeSet[JavaInt](RestOptions.PORT, cancelRequest.properties.get(RestOptions.PORT.key()).toString.toInt)
     logInfo(
       s"""
          |------------------------------------------------------------------
@@ -76,7 +66,7 @@ object RemoteSubmit extends FlinkSubmitTrait {
     try {
       client = standAloneDescriptor._2.retrieve(standAloneDescriptor._1).getClusterClient
       val jobID = JobID.fromHexString(cancelRequest.jobId)
-      val actionResult = cancelJob(cancelRequest, jobID, client)
+      val actionResult = super.cancelJob(cancelRequest, jobID, client)
       CancelResponse(actionResult)
     } catch {
       case e: Exception =>
@@ -93,7 +83,8 @@ object RemoteSubmit extends FlinkSubmitTrait {
    * Submit flink session job via rest api.
    */
   // noinspection DuplicatedCode
-  @throws[Exception] def restApiSubmit(submitRequest: SubmitRequest, flinkConfig: Configuration, fatJar: File): SubmitResponse = {
+  @throws[Exception]
+  def restApiSubmit(submitRequest: SubmitRequest, flinkConfig: Configuration, fatJar: File): SubmitResponse = {
     // retrieve standalone session cluster and submit flink job on session mode
     var clusterDescriptor: StandaloneClusterDescriptor = null;
     var client: ClusterClient[StandaloneClusterId] = null
@@ -117,7 +108,8 @@ object RemoteSubmit extends FlinkSubmitTrait {
   /**
    * Submit flink session job with building JobGraph via Standalone ClusterClient api.
    */
-  @throws[Exception] def jobGraphSubmit(submitRequest: SubmitRequest, flinkConfig: Configuration, jarFile: File): SubmitResponse = {
+  @throws[Exception]
+  def jobGraphSubmit(submitRequest: SubmitRequest, flinkConfig: Configuration, jarFile: File): SubmitResponse = {
     var clusterDescriptor: StandaloneClusterDescriptor = null;
     var packageProgram: PackagedProgram = null
     var client: ClusterClient[StandaloneClusterId] = null

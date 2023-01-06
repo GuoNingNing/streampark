@@ -17,30 +17,10 @@
 
 package org.apache.streampark.flink.submit.`trait`
 
-import com.google.common.collect.Lists
-import org.apache.commons.cli.{CommandLine, Options}
-import org.apache.commons.collections.MapUtils
-import org.apache.commons.lang3.StringUtils
-import org.apache.flink.api.common.JobID
-import org.apache.flink.client.cli.CliFrontend.loadCustomCommandLines
-import org.apache.flink.client.cli._
-import org.apache.flink.client.deployment.application.ApplicationConfiguration
-import org.apache.flink.client.program.{ClusterClient, PackagedProgram, PackagedProgramUtils}
-import org.apache.flink.configuration._
-import org.apache.flink.runtime.jobgraph.{JobGraph, SavepointConfigOptions}
-import org.apache.flink.util.FlinkException
-import org.apache.flink.util.Preconditions.checkNotNull
-import org.apache.streampark.common.conf.ConfigConst._
-import org.apache.streampark.common.conf.{ConfigConst, Workspace}
-import org.apache.streampark.common.enums.{ApplicationType, DevelopmentMode, ExecutionMode, ResolveOrder}
-import org.apache.streampark.common.util.{Logger, SystemPropertyUtils, Utils}
-import org.apache.streampark.flink.core.conf.FlinkRunOption
-import org.apache.streampark.flink.core.FlinkClusterClient
-import org.apache.streampark.flink.submit.bean._
-
 import java.io.File
-import java.util.concurrent.TimeUnit
 import java.util.{Collections, List => JavaList, Map => JavaMap}
+import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -48,6 +28,27 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
+import com.google.common.collect.Lists
+import org.apache.commons.cli.{CommandLine, Options}
+import org.apache.commons.collections.MapUtils
+import org.apache.commons.lang3.StringUtils
+import org.apache.flink.api.common.JobID
+import org.apache.flink.client.cli._
+import org.apache.flink.client.cli.CliFrontend.loadCustomCommandLines
+import org.apache.flink.client.deployment.application.ApplicationConfiguration
+import org.apache.flink.client.program.{ClusterClient, PackagedProgram, PackagedProgramUtils}
+import org.apache.flink.configuration._
+import org.apache.flink.runtime.jobgraph.{JobGraph, SavepointConfigOptions}
+import org.apache.flink.util.FlinkException
+import org.apache.flink.util.Preconditions.checkNotNull
+
+import org.apache.streampark.common.conf.ConfigConst._
+import org.apache.streampark.common.conf.Workspace
+import org.apache.streampark.common.enums.{ApplicationType, DevelopmentMode, ExecutionMode}
+import org.apache.streampark.common.util.{DeflaterUtils, Logger}
+import org.apache.streampark.flink.core.FlinkClusterClient
+import org.apache.streampark.flink.core.conf.FlinkRunOption
+import org.apache.streampark.flink.submit.bean._
 
 trait FlinkSubmitTrait extends Logger {
 
@@ -57,7 +58,8 @@ trait FlinkSubmitTrait extends Logger {
   private[submit] lazy val PARAM_KEY_APP_NAME = KEY_APP_NAME("--")
   private[submit] lazy val PARAM_KEY_FLINK_PARALLELISM = KEY_FLINK_PARALLELISM("--")
 
-  @throws[Exception] def submit(submitRequest: SubmitRequest): SubmitResponse = {
+  @throws[Exception]
+  def submit(submitRequest: SubmitRequest): SubmitResponse = {
     logInfo(
       s"""
          |--------------------------------------- flink job start ---------------------------------------
@@ -69,13 +71,9 @@ trait FlinkSubmitTrait extends Logger {
          |    k8sNamespace     : ${submitRequest.k8sSubmitParam.kubernetesNamespace}
          |    flinkExposedType : ${submitRequest.k8sSubmitParam.flinkRestExposedType}
          |    clusterId        : ${submitRequest.k8sSubmitParam.clusterId}
-         |    resolveOrder     : ${submitRequest.resolveOrder.getName}
          |    applicationType  : ${submitRequest.applicationType.getName}
-         |    flameGraph       : ${submitRequest.flameGraph != null}
          |    savePoint        : ${submitRequest.savePoint}
-         |    option           : ${submitRequest.option}
-         |    property         : ${submitRequest.option}
-         |    dynamicOption    : ${submitRequest.dynamicOption.mkString(" ")}
+         |    properties       : ${submitRequest.properties.mkString(" ")}
          |    args             : ${submitRequest.args}
          |    appConf          : ${submitRequest.appConf}
          |    flinkBuildResult : ${submitRequest.buildResult}
@@ -95,24 +93,54 @@ trait FlinkSubmitTrait extends Logger {
       .safeSet(PipelineOptions.NAME, submitRequest.effectiveAppName)
       .safeSet(DeploymentOptions.TARGET, submitRequest.executionMode.getName)
       .safeSet(SavepointConfigOptions.SAVEPOINT_PATH, submitRequest.savePoint)
-      .safeSet(CoreOptions.CLASSLOADER_RESOLVE_ORDER, submitRequest.resolveOrder.getName)
       .safeSet(ApplicationConfiguration.APPLICATION_MAIN_CLASS, submitRequest.appMain)
       .safeSet(ApplicationConfiguration.APPLICATION_ARGS, extractProgramArgs(submitRequest))
-      .safeSet(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, new JobID().toHexString)
+      .safeSet(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, submitRequest.jobId)
 
     val flinkDefaultConfiguration = getFlinkDefaultConfiguration(submitRequest.flinkVersion.flinkHome)
-    //state.checkpoints.num-retained
+    // state.checkpoints.num-retained
     val retainedOption = CheckpointingOptions.MAX_RETAINED_CHECKPOINTS
-    flinkConfig.set(retainedOption, flinkDefaultConfiguration.get(retainedOption))
+    flinkConfig.safeSet(retainedOption, flinkDefaultConfiguration.get(retainedOption))
+
+    // set savepoint parameter
+    if (submitRequest.savePoint != null) {
+      flinkConfig.safeSet(SavepointConfigOptions.SAVEPOINT_PATH, submitRequest.savePoint)
+      flinkConfig.setBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, submitRequest.allowNonRestoredState)
+    }
+
+    // set JVMOptions..
+    setJvmOptions(submitRequest, flinkConfig)
 
     setConfig(submitRequest, flinkConfig)
 
     doSubmit(submitRequest, flinkConfig)
+
+  }
+
+  def setJvmOptions(submitRequest: SubmitRequest, flinkConfig: Configuration): Unit = {
+    if (MapUtils.isNotEmpty(submitRequest.properties)) {
+      submitRequest.properties.foreach(x => {
+        val k = x._1.trim
+        val v = x._2.toString
+        if (k == CoreOptions.FLINK_JVM_OPTIONS.key()) {
+          flinkConfig.set(CoreOptions.FLINK_JVM_OPTIONS, v)
+        } else if (k == CoreOptions.FLINK_JM_JVM_OPTIONS.key()) {
+          flinkConfig.set(CoreOptions.FLINK_JM_JVM_OPTIONS, v)
+        } else if (k == CoreOptions.FLINK_HS_JVM_OPTIONS.key()) {
+          flinkConfig.set(CoreOptions.FLINK_HS_JVM_OPTIONS, v)
+        } else if (k == CoreOptions.FLINK_TM_JVM_OPTIONS.key()) {
+          flinkConfig.set(CoreOptions.FLINK_TM_JVM_OPTIONS, v)
+        } else if (k == CoreOptions.FLINK_CLI_JVM_OPTIONS.key()) {
+          flinkConfig.set(CoreOptions.FLINK_CLI_JVM_OPTIONS, v)
+        }
+      })
+    }
   }
 
   def setConfig(submitRequest: SubmitRequest, flinkConf: Configuration): Unit
 
-  @throws[Exception] def cancel(cancelRequest: CancelRequest): CancelResponse = {
+  @throws[Exception]
+  def cancel(cancelRequest: CancelRequest): CancelResponse = {
     logInfo(
       s"""
          |----------------------------------------- flink job cancel --------------------------------------
@@ -137,10 +165,11 @@ trait FlinkSubmitTrait extends Logger {
   @throws[Exception]
   def doCancel(cancelRequest: CancelRequest, flinkConf: Configuration): CancelResponse
 
-  def trySubmit(submitRequest: SubmitRequest,
-                flinkConfig: Configuration,
-                jarFile: File)(restApiFunc: (SubmitRequest, Configuration, File) => SubmitResponse)
-               (jobGraphFunc: (SubmitRequest, Configuration, File) => SubmitResponse): SubmitResponse = {
+  def trySubmit(
+      submitRequest: SubmitRequest,
+      flinkConfig: Configuration,
+      jarFile: File)(restApiFunc: (SubmitRequest, Configuration, File) => SubmitResponse)(jobGraphFunc: (SubmitRequest, Configuration, File) => SubmitResponse)
+      : SubmitResponse = {
     // Prioritize using Rest API submit while using JobGraph submit plan as backup
     Try {
       logInfo(s"[flink-submit] Attempting to submit in Rest API Submit Plan.")
@@ -160,22 +189,20 @@ trait FlinkSubmitTrait extends Logger {
   private[submit] def getJobGraph(flinkConfig: Configuration, submitRequest: SubmitRequest, jarFile: File): (PackagedProgram, JobGraph) = {
     val packageProgram = PackagedProgram
       .newBuilder
-      .setSavepointRestoreSettings(submitRequest.savepointRestoreSettings)
       .setJarFile(jarFile)
       .setEntryPointClassName(flinkConfig.getOptional(ApplicationConfiguration.APPLICATION_MAIN_CLASS).get())
+      .setSavepointRestoreSettings(submitRequest.savepointRestoreSettings)
       .setArguments(
         flinkConfig
           .getOptional(ApplicationConfiguration.APPLICATION_ARGS)
-          .orElse(Lists.newArrayList()): _*
-      ).build()
+          .orElse(Lists.newArrayList()): _*).build()
 
     val jobGraph = PackagedProgramUtils.createJobGraph(
       packageProgram,
       flinkConfig,
       getParallelism(submitRequest),
       null,
-      false
-    )
+      false)
     packageProgram -> jobGraph
   }
 
@@ -184,17 +211,7 @@ trait FlinkSubmitTrait extends Logger {
     case Failure(e) => throw new CliArgsException(e.getMessage)
   }
 
-  //----------Public Method end ------------------
-
-  private[submit] lazy val jvmProfilerJar: String = {
-    val pluginsPath = SystemPropertyUtils.get(ConfigConst.KEY_APP_HOME).concat("/plugins")
-    val pluginsDir = new File(pluginsPath)
-    pluginsDir.list().filter(_.matches("streampark-jvm-profiler-.*\\.jar")) match {
-      case Array() => throw new IllegalArgumentException(s"[StreamPark] can no found streampark-jvm-profiler jar in $pluginsPath")
-      case array if array.length == 1 => array.head
-      case more => throw new IllegalArgumentException(s"[StreamPark] found multiple streampark-jvm-profiler jar in $pluginsPath,[${more.mkString(",")}]")
-    }
-  }
+  // ----------Public Method end ------------------
 
   private[submit] def validateAndGetActiveCommandLine(customCommandLines: JavaList[CustomCommandLine], commandLine: CommandLine): CustomCommandLine = {
     val line = checkNotNull(commandLine)
@@ -226,13 +243,12 @@ trait FlinkSubmitTrait extends Logger {
   }
 
   private[submit] def getParallelism(submitRequest: SubmitRequest): Integer = {
-    if (submitRequest.option.containsKey(KEY_FLINK_PARALLELISM())) {
-      Integer.valueOf(submitRequest.option.get(KEY_FLINK_PARALLELISM()).toString)
+    if (submitRequest.properties.containsKey(KEY_FLINK_PARALLELISM())) {
+      Integer.valueOf(submitRequest.properties.get(KEY_FLINK_PARALLELISM()).toString)
     } else {
       getFlinkDefaultConfiguration(submitRequest.flinkVersion.flinkHome).getInteger(
         CoreOptions.DEFAULT_PARALLELISM,
-        CoreOptions.DEFAULT_PARALLELISM.defaultValue()
-      )
+        CoreOptions.DEFAULT_PARALLELISM.defaultValue())
     }
   }
 
@@ -240,11 +256,11 @@ trait FlinkSubmitTrait extends Logger {
 
     val commandLineOptions = getCommandLineOptions(submitRequest.flinkVersion.flinkHome)
 
-    //read and verify user config...
+    // read and verify user config...
     val cliArgs = {
       val optionMap = new mutable.HashMap[String, Any]()
       submitRequest.appOption.filter(x => {
-        //验证参数是否合法...
+        // 验证参数是否合法...
         val verify = commandLineOptions.hasOption(x._1)
         if (!verify) logWarn(s"param:${x._1} is error,skip it.")
         verify
@@ -275,28 +291,14 @@ trait FlinkSubmitTrait extends Logger {
         }
       })
 
-      //-jvm profile only on yarn support
-      if (Utils.notEmpty(submitRequest.flameGraph) && ExecutionMode.isYarnMode(submitRequest.executionMode)) {
-        val buffer = new StringBuffer()
-        submitRequest.flameGraph.foreach(p => buffer.append(s"${p._1}=${p._2},"))
-        val param = buffer.toString.dropRight(1)
-        array += s"-D${CoreOptions.FLINK_TM_JVM_OPTIONS.key()}=-javaagent:$$PWD/plugins/$jvmProfilerJar=$param"
+      // app properties
+      if (MapUtils.isNotEmpty(submitRequest.properties)) {
+        submitRequest.properties.foreach(x => {
+          if (!x._1.startsWith(CoreOptions.FLINK_JVM_OPTIONS.key())) {
+            array += s"-D${x._1}=${x._2}"
+          }
+        })
       }
-
-      // The priority of the parameters defined on the page is greater than the app conf file, property parameters etc.
-      if (MapUtils.isNotEmpty(submitRequest.option)) {
-        submitRequest.option.foreach(x => array += s"-D${x._1.trim}=${x._2.toString.trim}")
-      }
-
-      //-D other dynamic parameter
-      if (submitRequest.dynamicOption != null && submitRequest.dynamicOption.nonEmpty) {
-        submitRequest.dynamicOption
-          .filter(_._1 != "classloader.resolve-order")
-          .foreach(x => array += s"-D${x._1}=${x._2}")
-      }
-
-      array += s"-Dclassloader.resolve-order=${submitRequest.resolveOrder.getName}"
-
       array.toArray
     }
 
@@ -324,25 +326,16 @@ trait FlinkSubmitTrait extends Logger {
     FlinkRunOption.mergeOptions(CliFrontendParser.getRunCommandOptions, customCommandLineOptions)
   }
 
-  private[submit] def extractConfiguration(flinkHome: String,
-                                           dynamicOption: JavaMap[String, String],
-                                           extraParameter: JavaMap[String, Any],
-                                           resolveOrder: ResolveOrder): Configuration = {
+  private[submit] def extractConfiguration(flinkHome: String, properties: JavaMap[String, Any]): Configuration = {
     val commandLine = {
       val commandLineOptions = getCommandLineOptions(flinkHome)
-      //read and verify user config...
+      // read and verify user config...
       val cliArgs = {
         val array = new ArrayBuffer[String]()
         // The priority of the parameters defined on the page is greater than the app conf file, property parameters etc.
-        if (MapUtils.isNotEmpty(extraParameter)) {
-          extraParameter.foreach(x => array += s"-D${x._1.trim}=${x._2.toString.trim}")
+        if (MapUtils.isNotEmpty(properties)) {
+          properties.foreach(x => array += s"-D${x._1}=${x._2.toString.trim}")
         }
-        if (dynamicOption != null && dynamicOption.nonEmpty) {
-          dynamicOption
-            .filter(_._1 != "classloader.resolve-order")
-            .foreach(x => array += s"-D${x._1}=${x._2}")
-        }
-        array += s"-Dclassloader.resolve-order=${resolveOrder.getName}"
         array.toArray
       }
       FlinkRunOption.parse(commandLineOptions, cliArgs, true)
@@ -357,62 +350,60 @@ trait FlinkSubmitTrait extends Logger {
     val programArgs = new ArrayBuffer[String]()
 
     if (StringUtils.isNotEmpty(submitRequest.args)) {
+      val multiLineChar = "\"\"\""
+      val array = submitRequest.args.split("\\s+")
+      if (array.filter(_.startsWith(multiLineChar)).isEmpty) {
+        array.foreach(programArgs +=)
+      } else {
+        val argsArray = new ArrayBuffer[String]()
+        val tempBuffer = new ArrayBuffer[String]()
 
-      val array = submitRequest.args.split("\\s")
-      val argsArray = new ArrayBuffer[String]()
-      val tempBuffer = new ArrayBuffer[String]()
-
-      def processElement(index: Int, num: Int): Unit = {
-
-        if (index == array.length) {
-          if (tempBuffer.nonEmpty) {
-            argsArray += tempBuffer.mkString(" ")
+        def processElement(index: Int, multiLine: Boolean): Unit = {
+          if (index == array.length) {
+            if (tempBuffer.nonEmpty) {
+              argsArray += tempBuffer.mkString(" ")
+            }
+            return
           }
-          return
-        }
+          val next = index + 1
+          val elem = array(index)
 
-        val next = index + 1
-        val elem = array(index)
-
-        if (elem.trim.nonEmpty) {
-          if (num == 0) {
-            if (elem.startsWith("'")) {
-              tempBuffer += elem
-              processElement(next, 1)
-            } else if (elem.startsWith("\"")) {
-              tempBuffer += elem
-              processElement(next, 2)
+          if (elem.trim.nonEmpty) {
+            if (!multiLine) {
+              if (elem.startsWith(multiLineChar)) {
+                tempBuffer += elem.drop(3)
+                processElement(next, true)
+              } else {
+                argsArray += elem
+                processElement(next, false)
+              }
             } else {
-              argsArray += elem
-              processElement(next, 0)
+              if (elem.endsWith(multiLineChar)) {
+                tempBuffer += elem.dropRight(3)
+                argsArray += tempBuffer.mkString(" ")
+                tempBuffer.clear()
+                processElement(next, false)
+              } else {
+                tempBuffer += elem
+                processElement(next, multiLine)
+              }
             }
           } else {
             tempBuffer += elem
-            val end1 = elem.endsWith("'") && num == 1
-            val end2 = elem.endsWith("\"") && num == 2
-            if (end1 || end2) {
-              argsArray += tempBuffer.mkString(" ")
-              tempBuffer.clear()
-              processElement(next, 0)
-            } else {
-              processElement(next, num)
-            }
+            processElement(next, false)
           }
-        } else {
-          tempBuffer += elem
-          processElement(next, 0)
         }
-      }
 
-      processElement(0, 0)
-      argsArray.foreach(x => programArgs += x.trim.replaceAll("^[\"|']|[\"|']$", ""))
+        processElement(0, false)
+        argsArray.foreach(x => programArgs += x.trim)
+      }
     }
 
     if (submitRequest.applicationType == ApplicationType.STREAMPARK_FLINK) {
       programArgs += PARAM_KEY_FLINK_CONF
       programArgs += submitRequest.flinkYaml
       programArgs += PARAM_KEY_APP_NAME
-      programArgs += submitRequest.effectiveAppName
+      programArgs += DeflaterUtils.zipString(submitRequest.effectiveAppName)
       programArgs += PARAM_KEY_FLINK_PARALLELISM
       programArgs += getParallelism(submitRequest).toString
       submitRequest.developmentMode match {
@@ -431,10 +422,7 @@ trait FlinkSubmitTrait extends Logger {
     programArgs.toList.asJava
   }
 
-
-  private[this] def applyConfiguration(flinkHome: String,
-                                       activeCustomCommandLine: CustomCommandLine,
-                                       commandLine: CommandLine): Configuration = {
+  private[this] def applyConfiguration(flinkHome: String, activeCustomCommandLine: CustomCommandLine, commandLine: CommandLine): Configuration = {
 
     require(activeCustomCommandLine != null, "activeCustomCommandLine must not be null.")
     val executorConfig = activeCustomCommandLine.toConfiguration(commandLine)
@@ -451,8 +439,7 @@ trait FlinkSubmitTrait extends Logger {
     configuration
   }
 
-
-  private[submit] implicit class EnhanceFlinkConfiguration(flinkConfig: Configuration) {
+  implicit private[submit] class EnhanceFlinkConfiguration(flinkConfig: Configuration) {
     def safeSet[T](option: ConfigOption[T], value: T): Configuration = {
       flinkConfig match {
         case x if value != null && value.toString.nonEmpty => x.set(option, value)
@@ -463,7 +450,8 @@ trait FlinkSubmitTrait extends Logger {
 
   private[submit] def cancelJob(cancelRequest: CancelRequest, jobID: JobID, client: ClusterClient[_]): String = {
     val savePointDir = {
-      if (!cancelRequest.withSavePoint) null; else {
+      if (!cancelRequest.withSavePoint) null;
+      else {
         if (StringUtils.isNotEmpty(cancelRequest.customSavePointPath)) {
           cancelRequest.customSavePointPath
         } else {
@@ -475,8 +463,7 @@ trait FlinkSubmitTrait extends Logger {
                 if (cancelRequest.executionMode == ExecutionMode.YARN_APPLICATION) {
                   Workspace.remote.APP_SAVEPOINTS
                 } else null
-              }
-          )
+              })
           if (StringUtils.isEmpty(configDir)) {
             throw new FlinkException(s"[StreamPark] executionMode: ${cancelRequest.executionMode.getName}, savePoint path is null or invalid.")
           } else configDir
